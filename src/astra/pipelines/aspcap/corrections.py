@@ -1713,30 +1713,20 @@ def apply_ipl4v2_parameter_corrections(batch_size: int = 500):
 def get_dr21_teff_corrections(logg, mh, teff, e_teff=None):
     """
     Apply DR21 Teff corrections.
-    These are identical to the IPL-4v2 Teff corrections:
-    Guilherme Limberg calibrated to GHB09 J-K Teff (2nd-degree poly in [M/H]).
+    Single linear correction in [M/H] and Teff — no giant/dwarf split.
+    Guilherme Limberg, calibrated to GHB09 J-K Teff (Jonsson+2020 Eq. 1 form).
 
-    KNOWN ARTIFACT / OPEN DECISION (APJ, 2026-07-27): the giant and dwarf
-    polynomials do not agree on the classification boundary. At solar [M/H] the
-    giant branch adds +65 K and the dwarf branch subtracts 105 K, so switching
-    between them here drives the two populations 178 K towards each other and
-    folds them past one another -- giants land on the dwarf side and vice versa.
-    On DR17 that is a +28% ridge along the boundary with a -46% hole beside it,
-    running through the subgiant branch (logg 3.80 at Teff 4800 K down to 3.00 at
-    6200 K, crossing logg 3.5 at 5325 K).
+    teff_calib = raw_teff + A + B*clip([M/H], -2.5, 0.5) + C*clip(Teff, 4300, 7000)
+    A=744.758665, B=-74.508183, C=-0.143764
 
-    This is deliberately left uncorrected here. Smoothly interpolating the two
-    branches removes the artifact but is not a defensible description of a
-    subgiant's Teff correction -- it averages two calibrations neither of which
-    was fit to subgiants. A real decision is needed on how the branches should
-    meet: extend Guilherme's giant branch up in logg, fit subgiants explicitly,
-    or move to a single smooth surface in (Teff, [M/H]) as DR16 Eq. (1) did,
-    which had no giant/dwarf split and so never had this problem. See
-    `teff_boundary_blend_debug.py` for the blend experiment and its diagnostics.
+    Replaces the old giant/dwarf-split IPL-4v2 correction which produced a
+    178 K density artifact along the classification boundary.
 
     Returns (teff_corr, e_teff_corr, is_giant, is_dwarf).
     e_teff_corr is None when e_teff is not supplied.
-    Unclassified stars (missing teff/logg) get NaN in teff_corr.
+    Stars with missing teff or mh get NaN in teff_corr.
+    is_giant is all-False (no classification in this calibration); is_dwarf marks
+    all stars with finite inputs so callers can detect the "all stars corrected" case.
     """
     logg  = np.asarray(logg,  dtype=float)
     mh    = np.asarray(mh,    dtype=float)
@@ -1744,37 +1734,25 @@ def get_dr21_teff_corrections(logg, mh, teff, e_teff=None):
     if e_teff is not None:
         e_teff = np.asarray(e_teff, dtype=float)
 
-    # Luminosity classification using Kiel diagram boundaries
-    mask_missing = ~np.isfinite(teff) | ~np.isfinite(logg)
-    boundary1 = (-4580.0 + 0.4 * teff) / (-700.0)
-    boundary2 = 0.0023 * teff - 5.4
+    coeffA, coeffB, coeffC = 744.758665, -74.508183, -0.143764
 
-    is_giant = (
-        ~mask_missing & (
-              ((teff < 4000)  & (logg < boundary2))
-            | ((teff >= 4000) & (teff < 4800)  & (logg < 3.8))
-            | ((teff >= 4800) & (teff <= 6200) & (logg < boundary1))
-            | ((teff > 6200)  & (logg < 3.0))
-        )
+    mh_prime   = np.clip(mh,   -2.5, 0.5)
+    teff_prime = np.clip(teff, 4300, 7000)
+
+    mask_missing = ~np.isfinite(teff) | ~np.isfinite(mh)
+
+    teff_corr = np.where(
+        mask_missing,
+        np.nan,
+        teff + coeffA + coeffB * mh_prime + coeffC * teff_prime,
     )
-    is_dwarf = ~mask_missing & ~is_giant
 
-    teff_corr   = np.full_like(teff, np.nan)
-    e_teff_corr = np.full_like(teff, np.nan) if e_teff is not None else None
+    is_giant = np.zeros(teff.shape, dtype=bool)
+    is_dwarf = ~mask_missing
 
-    # Giants: clip [M/H] to [-2.2, 0.4], coefficients A=44.7, B=10.2, C=65.2, sys_err=84.3 K
-    feh_g = np.clip(mh, -2.2, 0.4)
-    giant_offset = 44.7 * feh_g**2 + 10.2 * feh_g + 65.2
-    teff_corr[is_giant] = teff[is_giant] + giant_offset[is_giant]
+    e_teff_corr = None
     if e_teff is not None:
-        e_teff_corr[is_giant] = np.sqrt(e_teff[is_giant]**2 + 84.3**2)
-
-    # Dwarfs: clip [M/H] to [-0.9, 0.4], coefficients A=243.1, B=-69.0, C=-105.1, sys_err=161.4 K
-    feh_d = np.clip(mh, -0.9, 0.4)
-    dwarf_offset = 243.1 * feh_d**2 - 69.0 * feh_d - 105.1
-    teff_corr[is_dwarf] = teff[is_dwarf] + dwarf_offset[is_dwarf]
-    if e_teff is not None:
-        e_teff_corr[is_dwarf] = np.sqrt(e_teff[is_dwarf]**2 + 161.4**2)
+        e_teff_corr = np.where(mask_missing, np.nan, e_teff)
 
     return teff_corr, e_teff_corr, is_giant, is_dwarf
 

@@ -252,7 +252,32 @@ These track the origin of the initial parameter guess:
 
 ### Calibration flags (`calibrated_flags`)
 
-Post-processing calibration flags:
+Flags of the DR21 Teff and log(g) calibrations. Exactly one of the Teff region flags (bits 0-5) and one of the log(g) region flags (bits 9-14) is set for every calibrated star:
+
+| Flag | Description |
+| --- | --- |
+| `flag_teff_unclassified` | Teff: unclassified (logg < 3.0, Teff >= 5500 K) |
+| `flag_teff_giant` | Teff: giant (logg < 3.5, 4500 <= Teff < 5500 K) |
+| `flag_teff_giant_clipped` | Teff: giant below 4500 K; correction frozen at 4500 K |
+| `flag_teff_dwarf` | Teff: dwarf inside the dwarf window |
+| `flag_teff_m_dwarf` | Teff: M dwarf; correction mostly switched off |
+| `flag_teff_hot_dwarf` | Teff: dwarf above 6500 K; correction frozen at 6500 K |
+| `flag_teff_m_h_clipped` | Teff: [M/H] outside (-2.0, +0.5); correction frozen |
+| `flag_teff_logg_clipped` | Teff: logg outside (0, 5) |
+| `flag_teff_not_calibrated` | Teff: not calibrated |
+| `flag_logg_giant_clamp` | logg: giant below the Model D lower clamp (logg < 0.5) |
+| `flag_logg_giant` | logg: giant (calibrated logg 0.5-3.35) |
+| `flag_logg_giant_taper` | logg: giant in the Model D upper taper (logg >= 3.35) |
+| `flag_logg_hot_dwarf` | logg: dwarf above 6000 K; correction frozen at 6000 K |
+| `flag_logg_dwarf` | logg: dwarf, 3500 < Teff <= 6000 K |
+| `flag_logg_cool_dwarf` | logg: dwarf at or below 3500 K; correction frozen at 3500 K |
+| `flag_logg_m_h_clipped` | logg: [M/H] outside the branch support; correction frozen |
+| `flag_logg_teff_clipped` | logg: Teff outside (3500, 6000) K on the dwarf branch |
+| `flag_logg_not_calibrated` | logg: not calibrated |
+
+### DR19-era calibration flags (`calibrated_flags_dr19`)
+
+Calibration flags of the DR19-era corrections (DR19, IPL-3, IPL-4v2):
 
 | Flag | Description |
 | --- | --- |

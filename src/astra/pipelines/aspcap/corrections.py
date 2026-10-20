@@ -821,7 +821,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
         .update(
             logg=ASPCAP.raw_logg,
             e_logg=ASPCAP.raw_e_logg,
-            calibrated_flags=0
+            calibrated_flags_dr19=0
         )
         .where(
             (ASPCAP.v_astra_major_minor >= 7)
@@ -834,7 +834,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
         ASPCAP
         .update(
             logg=ASPCAP.raw_logg - (-0.947 + 1.886e-4 * ASPCAP.raw_teff + 0.410 * ASPCAP.raw_m_h_atm),
-            calibrated_flags=ASPCAP.flag_as_dwarf_for_calibration.set()
+            calibrated_flags_dr19=ASPCAP.flag_as_dwarf_for_calibration.set()
         )
         .where(
             (ASPCAP.v_astra_major_minor >= 7)
@@ -851,7 +851,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
         ASPCAP
         .update(
             logg=ASPCAP.raw_logg + ( 1.6930001 + 5.2043072e-07 * fn.pow(ASPCAP.raw_teff - 3800,2) - 3.6010967e-04 * ASPCAP.raw_teff - 1.7316068e+00 * ASPCAP.raw_m_h_atm + 4.0915239e-04 * ASPCAP.raw_m_h_atm * ASPCAP.raw_teff),
-            calibrated_flags=ASPCAP.flag_as_m_dwarf_for_calibration.set()
+            calibrated_flags_dr19=ASPCAP.flag_as_m_dwarf_for_calibration.set()
         )
         .where(
             (ASPCAP.v_astra_major_minor >= 7)
@@ -867,7 +867,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
         .update(
             logg=np.nan,
             e_logg=np.nan,
-            calibrated_flags=ASPCAP.flag_censored_logg_for_metal_poor_m_dwarf.set()
+            calibrated_flags_dr19=ASPCAP.flag_censored_logg_for_metal_poor_m_dwarf.set()
         )
         .where(
             (ASPCAP.v_astra_major_minor >= 7)
@@ -882,7 +882,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
     (
         ASPCAP
         .update(
-            calibrated_flags=ASPCAP.flag_as_m_dwarf_for_calibration.set(),
+            calibrated_flags_dr19=ASPCAP.flag_as_m_dwarf_for_calibration.set(),
             logg=ASPCAP.raw_logg - (-0.3183278 + -5.9076945e-07 * fn.pow(raw_teff-3800,2) + 4.2788306e-4 * (raw_teff-3800) + 2.1420905e-01 * raw_m_h_atm)
         )
     )
@@ -905,7 +905,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
         for chunk in chunked(q, batch_size):
             updated = []
             for r in chunk:
-                r.calibrated_flags = 0 # remove any previous classifications
+                r.calibrated_flags_dr19 = 0 # remove any previous classifications
                 r.logg = r.raw_logg
 
                 # evolved
@@ -936,7 +936,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
                     updated.append(r)
 
             if updated:
-                fields = [ASPCAP.logg, ASPCAP.calibrated_flags]
+                fields = [ASPCAP.logg, ASPCAP.calibrated_flags_dr19]
                 (
                     ASPCAP
                     .bulk_update(
@@ -1419,7 +1419,7 @@ def apply_ipl3_logg_corrections(batch_size: int = 500, limit: int = None):
             any_mass_radius = False
             updated = []
             for r in chunk:
-                r.calibrated_flags = 0 # remove any previous classifications
+                r.calibrated_flags_dr19 = 0 # remove any previous classifications
                 r.logg = r.raw_logg
 
                 #if r.raw_logg >= 3.8 and r.raw_teff < 4800 and r.bp_mag is not None and r.rp_mag is not None and 5.5 > (r.bp_mag - r.rp_mag) and (r.bp_mag - r.rp_mag) > 1.5:
@@ -1477,7 +1477,7 @@ def apply_ipl3_logg_corrections(batch_size: int = 500, limit: int = None):
                     updated.append(r)
 
             if updated:
-                fields = [ASPCAP.logg, ASPCAP.calibrated_flags]
+                fields = [ASPCAP.logg, ASPCAP.calibrated_flags_dr19]
                 if any_mass_radius:
                     fields.extend([
                         ASPCAP.teff,
@@ -1714,7 +1714,7 @@ def apply_ipl4v2_parameter_corrections(batch_size: int = 500):
                     ASPCAP.logg,
                     ASPCAP.teff,
                     ASPCAP.e_teff,
-                    ASPCAP.calibrated_flags,
+                    ASPCAP.calibrated_flags_dr19,
                 ]
                 (
                     ASPCAP
@@ -1722,86 +1722,154 @@ def apply_ipl4v2_parameter_corrections(batch_size: int = 500):
                 )
             pb.update(batch_size)
 
-def get_dr21_teff_corrections(logg, mh, teff, e_teff=None):
+def get_dr21_teff_corrections(logg, mh, teff, return_details=False):
     """
-    Apply DR21 Teff corrections.
-    Single linear correction in [M/H] and Teff — no giant/dwarf split.
-    Guilherme Limberg, calibrated to GHB09 J-K Teff (Jonsson+2020 Eq. 1 form).
+    DR21 Teff corrections: strat3_F_Dwarf6500 (G. Limberg, 20260906).
+    Linear correction in [M/H] and Teff, calibrated to GHB09 J-Ks Teff, switched
+    off for cool dwarfs by a 2-D sigmoid:
 
-    teff_calib = raw_teff + A + B*clip([M/H], -2.5, 0.5) + C*clip(Teff, 4300, 7000)
-    A=744.758665, B=-74.508183, C=-0.143764
+        teff_cal = teff + S(logg', Teff') * (A + B*[M/H]' + C*Teff')
+        S        = 1 - f_logg * f_teff                 (0 cool dwarfs, 1 elsewhere)
+        f_logg   = 1 / (1 + exp(-8 * (logg' - 3.5)))   -> 1 dwarfs, 0 giants
+        f_teff   = 1 / (1 + exp((Teff' - 4350) / 100)) -> 1 cool,   0 warm
 
-    Replaces the old giant/dwarf-split IPL-4v2 correction which produced a
-    178 K density artifact along the classification boundary.
+    Primed quantities are clipped to the calibrator support.  The Teff window
+    depends on the luminosity class: giant (logg < 3.5 and Teff < 5500) 4500-5500 K,
+    dwarf (otherwise, if logg >= 3.0) 3000-6500 K; the remaining "unclassified"
+    stars (logg < 3.0, Teff >= 5500) take the giant window.
 
-    Returns (teff_corr, e_teff_corr, is_giant, is_dwarf).
-    e_teff_corr is None when e_teff is not supplied.
-    Stars with missing teff or mh get NaN in teff_corr.
-    is_giant is all-False (no classification in this calibration); is_dwarf marks
-    all stars with finite inputs so callers can detect the "all stars corrected" case.
+    Returns (teff_corr, flags).  teff_corr is NaN where not calibrated (raw Teff
+    negative/NaN, or logg/[M/H] NaN).  flags holds bits 0-8 of calibrated_flags:
+
+        0  unclassified    logg < 3.0 and Teff >= 5500
+        1  giant           logg < 3.5 and 4500 <= Teff < 5500
+        2  clipped giant   logg < 3.5 and Teff < 4500 (frozen at 4500 K)
+        3  dwarf           dwarf class, S >= 0.5, Teff <= 6500
+        4  M dwarf         dwarf class, S < 0.5 (Teff ~< 4350; correction mostly off)
+        5  hot dwarf       dwarf class, Teff > 6500 (frozen at 6500 K)
+        6  [M/H] outside (-2.0, +0.5)
+        7  logg outside (0, 5)
+        8  not calibrated
+    Bits 0-5 are exclusive: exactly one is set for every calibrated star.
     """
-    logg  = np.asarray(logg,  dtype=float)
-    mh    = np.asarray(mh,    dtype=float)
-    teff  = np.asarray(teff,  dtype=float)
-    if e_teff is not None:
-        e_teff = np.asarray(e_teff, dtype=float)
+    # Linear correction (fit to GHB09 J-Ks Teff)
+    A, B, C = 742.714857, -78.334601, -0.14259202
+    # Cool-dwarf gate S
+    GATE_LOGG0, GATE_K_LOGG = 3.50, 8.0          # f_logg midpoint, steepness [1/dex]
+    GATE_TEFF0, GATE_TEFF_WIDTH = 4350.0, 100.0  # f_teff midpoint, e-folding width [K]
+    GATE_MID = 0.5                               # S = 0.5 splits dwarf / M dwarf (flags)
+    # Clips: calibrator support
+    MH_CLIP = (-2.0, 0.5)
+    LOGG_CLIP = (0.0, 5.0)
+    WINDOW_DWARF = (3000.0, 6500.0)
+    WINDOW_GIANT = (4500.0, 5500.0)              # = the giant calibrators' Teff span
+    # Luminosity class (selects the window)
+    GIANT_LOGG_MAX, GIANT_TEFF_MAX = 3.5, 5500.0
+    DWARF_LOGG_MIN = 3.0
 
-    coeffA, coeffB, coeffC = 744.758665, -74.508183, -0.143764
+    def _sigmoid(x):
+        return 1.0 / (1.0 + np.exp(np.clip(-x, -700, 700)))
 
-    mh_prime   = np.clip(mh,   -2.5, 0.5)
-    teff_prime = np.clip(teff, 4300, 7000)
+    logg, mh, teff = np.broadcast_arrays(np.asarray(logg, dtype=float),
+                                         np.asarray(mh, dtype=float),
+                                         np.asarray(teff, dtype=float))
 
-    mask_missing = ~np.isfinite(teff) | ~np.isfinite(mh)
+    with np.errstate(invalid="ignore"):
+        valid = (np.isfinite(teff) & (teff >= 0.0)
+                 & np.isfinite(logg) & np.isfinite(mh))
+        is_giant = valid & (logg < GIANT_LOGG_MAX) & (teff < GIANT_TEFF_MAX)
+        is_dwarf = valid & ~is_giant & (logg >= DWARF_LOGG_MIN)
+        is_unclassified = valid & ~is_giant & ~is_dwarf
 
-    teff_corr = np.where(
-        mask_missing,
-        np.nan,
-        teff + coeffA + coeffB * mh_prime + coeffC * teff_prime,
-    )
+        logg_p = np.clip(logg, *LOGG_CLIP)
+        mh_p = np.clip(mh, *MH_CLIP)
+        teff_p = np.where(is_dwarf, np.clip(teff, *WINDOW_DWARF),
+                          np.clip(teff, *WINDOW_GIANT))
 
-    is_giant = np.zeros(teff.shape, dtype=bool)
-    is_dwarf = ~mask_missing
+        f_logg = _sigmoid(GATE_K_LOGG * (logg_p - GATE_LOGG0))
+        f_teff = _sigmoid(-(teff_p - GATE_TEFF0) / GATE_TEFF_WIDTH)
+        S = 1.0 - f_logg * f_teff
 
-    e_teff_corr = None
-    if e_teff is not None:
-        e_teff_corr = np.where(mask_missing, np.nan, e_teff)
+        teff_corr = np.where(valid, teff + S * (A + B * mh_p + C * teff_p), np.nan)
 
-    return teff_corr, e_teff_corr, is_giant, is_dwarf
+        is_m_dwarf = is_dwarf & (S < GATE_MID)
+        is_hot_dwarf = is_dwarf & ~is_m_dwarf & (teff > WINDOW_DWARF[1])
+        masks = [
+            is_unclassified,                                  # 0
+            is_giant & (teff >= WINDOW_GIANT[0]),             # 1
+            is_giant & (teff < WINDOW_GIANT[0]),              # 2
+            is_dwarf & ~is_m_dwarf & ~is_hot_dwarf,           # 3
+            is_m_dwarf,                                       # 4
+            is_hot_dwarf,                                     # 5
+            valid & (mh_p != mh),                             # 6
+            valid & (logg_p != logg),                         # 7
+            ~valid,                                           # 8
+        ]
+    flags = np.zeros(teff.shape, dtype=np.int64)
+    for bit, mask in enumerate(masks):
+        flags |= mask.astype(np.int64) << bit
+
+    if return_details:
+        details = {k: v for k, v in locals().items() if k.isupper()}
+        details.update(S=S, teff_p=teff_p, logg_p=logg_p, mh_p=mh_p, is_giant=is_giant,
+                       is_dwarf=is_dwarf, is_unclassified=is_unclassified)
+        return teff_corr, flags, details
+    return teff_corr, flags
 
 
-def get_dr21_logg_corrections(logg_spec, mh, teff, maxiter=100, tol=1e-4):
+def get_dr21_logg_corrections(logg_spec, mh, teff, maxiter=200, tol=1e-6,
+                              return_details=False):
     """
-    DR21 logg corrections
+    DR21 logg corrections: Model D (APOKASC-3) for giants, a Teff-driven dwarf
+    branch, blended by a sigmoid in raw logg.  Takes RAW Teff.
 
-    Only calculates logg corrections for giants right now.
-    This correction was defined by a fit to APOKASC3.
-    To reduce problems with the red clump, we define the result as a 
-    function of the asteroseismic logg, so we iterate to convergence.
-    The results work well for subgiant asteroseismology too (Serenelli et al. 2017).
-    Dwarf stars are currently not calibrated, but we keep their value
-    clipped to the giant correction for a global offset so as not to introduce a discontinuity in the logg distribution.
+        logg_cal = logg_spec - C(logg_cal, logg_spec, teff, [M/H])   (fixed point)
+        C = (1 - w) * D(logg_cal, [M/H]) + w * E(teff, [M/H])
+        w = 1 / (1 + exp(-8 * (logg_spec - 3.85)))      0 giants -> 1 dwarfs
+        E = -(a + b*clip(teff, 3500, 6000) + c*clip([M/H], -1.0, 0.6))
+        D = bicubic in (clip(logg_cal, 0.5, 3.5), clip([M/H], -2.0, 0.6)),
+            upper clamp tapered by a smoothstep over logg_cal 3.2-3.5
 
-    KNOWN ARTIFACT (APJ, 2026-07-27): the clip leaves the correction continuous
-    but not differentiable -- dD/dlogg drops from -0.24 (at solar [M/H]) to 0 in
-    one step at _G_MAX. Because the calibration is implicit, that slope jump
-    becomes a step in the spectroscopic->calibrated Jacobian (1.51 -> 1.00), so
-    stars just below 3.5 are spread ~30% further apart than stars just above and
-    DR17 shows a 14% density cliff along logg = 3.5 at every Teff. No individual
-    star moves discontinuously; only the density does, which is why it is
-    invisible in residual plots and shows up as an edge in the Kiel diagram.
-    Tapering the clip fixes it -- see `logg_clip_taper_debug.py` for the
-    experiment, the width trade-off, and the diagnostics.
+    C is (spectroscopic - reference), so the applied shift is -C.  The blend
+    weight uses logg_spec, not logg_cal (at logg_cal the fixed point diverges
+    for k >= 10).  |dC/dlogg_cal| <= 0.54: converges in 7-18 iterations.
 
-    Returns (logg_cal, is_giant, is_ms_dwarf, is_m_dwarf, n_iter).
+    Returns (logg_cal, flags, n_iter).  logg_cal is NaN where any input is
+    non-finite.  flags holds bits 9-17 of calibrated_flags:
+
+        9   logg_spec < 3.85 and logg_cal < 0.5 (Model D lower clamp)
+        10  logg_spec < 3.85 and 0.5 <= logg_cal < 3.35 (main giant region)
+        11  logg_spec < 3.85 and logg_cal >= 3.35 (past the taper midpoint)
+        12  logg_spec >= 3.85 and teff > 6000 (frozen at 6000 K)
+        13  logg_spec >= 3.85 and 3500 < teff <= 6000
+        14  logg_spec >= 3.85 and teff <= 3500 (frozen at 3500 K)
+        15  [M/H] outside the support of a branch carrying >= 10% weight:
+            (-2.0, +0.6) giant (logg_spec < 4.125), (-1.0, +0.6) dwarf (>= 3.575)
+        16  teff outside (3500, 6000) with the dwarf branch carrying >= 10% weight
+        17  not calibrated
+    Bits 9-14 are exclusive: exactly one is set for every calibrated star.
     """
-    # Giant iterative polynomial (model D, called "D" for unimportant historical reasons)
+    # Model D (APOKASC-3), unchanged from IPL-4v2.  Term order:
+    # 1, z, g, z^2, g z, g^2, z^3, g z^2, g^2 z, g^3   with g = logg_cal, z = [M/H]
     COEFF_D = np.array([
-        0.35694673, -0.07801092, -0.18306129,
-       -0.07847194,  0.24208357,  0.09102127,
-       -0.00585212, -0.01810008, -0.05627984, -0.01893467,
+         0.35694673, -0.07801092, -0.18306129,
+        -0.07847194,  0.24208357,  0.09102127,
+        -0.00585212, -0.01810008, -0.05627984, -0.01893467,
     ])
-    _G_MIN, _G_MAX = 0.5, 3.5
-    _Z_MIN, _Z_MAX = -2.0, 0.6
+    D_G_CLIP = (0.5, 3.5)        # Model D logg support (training ceiling 3.4357)
+    D_MH_CLIP = (-2.0, 0.6)
+    # Upper clamp smoothed over [3.2, 3.5] so dD/dg -> 0 continuously (a hard
+    # clamp steps the Jacobian 1.32 -> 1.00 and prints a density cliff at 3.5).
+    D_TAPER = 0.30
+    D_TAPER_MID = D_G_CLIP[1] - D_TAPER / 2      # 3.35, giant / taper flag boundary
+    # Dwarf branch: pooled fit over DR17 + GALAH DR4 + PARSEC (rms 0.0656 dex).
+    E_COEFF = (1.11371, -1.947054e-04, -0.20115)  # a, b [1/K], c
+    E_TEFF_CLIP = (3500.0, 6000.0)
+    E_MH_CLIP = (-1.0, 0.6)      # safety clip: no dwarf calibrators below -1
+    # Blend in raw logg; 10% / 90% points (+-ln 9 / k) gate the clip flags
+    BLEND_G0, BLEND_K = 3.85, 8.0
+    BLEND_LO = BLEND_G0 - np.log(9.0) / BLEND_K  # 3.575
+    BLEND_HI = BLEND_G0 + np.log(9.0) / BLEND_K  # 4.125
 
     def _design_matrix_2d(x, y, deg):
         cols = []
@@ -1810,122 +1878,130 @@ def get_dr21_logg_corrections(logg_spec, mh, teff, maxiter=100, tol=1e-4):
                 cols.append(x**i * y**(d - i))
         return np.column_stack(cols)
 
-    def _correction_D(g, z):
-        return _design_matrix_2d(np.clip(g, _G_MIN, _G_MAX),
-                                 np.clip(z, _Z_MIN, _Z_MAX), 3) @ COEFF_D
+    def _smoothstep(t):
+        t = np.clip(t, 0.0, 1.0)
+        return t * t * (3.0 - 2.0 * t)
 
-    logg_spec = np.asarray(logg_spec, dtype=float)
-    mh        = np.asarray(mh,        dtype=float)
-    teff      = np.asarray(teff,       dtype=float)
+    def correction_giant(g, z):
+        """Model D, upper clamp tapered toward its frozen edge value."""
+        zc = np.clip(z, *D_MH_CLIP)
+        out = _design_matrix_2d(np.clip(g, *D_G_CLIP), zc, 3) @ COEFF_D
+        edge = _design_matrix_2d(np.full_like(g, D_G_CLIP[1]), zc, 3) @ COEFF_D
+        lo = D_G_CLIP[1] - D_TAPER
+        wt = _smoothstep((np.minimum(g, D_G_CLIP[1]) - lo) / D_TAPER)
+        return np.where(g > lo, (1.0 - wt) * out + wt * edge, out)
 
-    finite      = np.isfinite(logg_spec) & np.isfinite(mh) & np.isfinite(teff)
-    is_giant    = finite # for now everything uses a giant calibration
-    # Dwarfs are not calibrated yet, so nothing is classified as one.
-    is_ms_dwarf = np.zeros_like(is_giant, dtype=bool)
-    is_m_dwarf  = np.zeros_like(is_giant, dtype=bool)
+    def correction_dwarf(t, z):
+        a, b, c = E_COEFF
+        return -(a + b * np.clip(t, *E_TEFF_CLIP) + c * np.clip(z, *E_MH_CLIP))
 
-    logg_cal = np.full_like(logg_spec, np.nan)
+    def blend_weight(gs):
+        return 1.0 / (1.0 + np.exp(np.clip(-BLEND_K * (gs - BLEND_G0), -700, 700)))
 
-    # Giant: iterative correction (function of asteroseismic logg, so iterate)
+    logg_spec, mh, teff = np.broadcast_arrays(np.asarray(logg_spec, dtype=float),
+                                              np.asarray(mh, dtype=float),
+                                              np.asarray(teff, dtype=float))
+    ok = np.isfinite(logg_spec) & np.isfinite(mh) & np.isfinite(teff)
+    logg_cal = np.full(logg_spec.shape, np.nan)
+
     n_iter = 0
-    if is_giant.any():
-        logg_est = logg_spec[is_giant].copy()
-        mh_logg, spec_logg = mh[is_giant], logg_spec[is_giant]
+    if ok.any():
+        gs, t, z = logg_spec[ok], teff[ok], mh[ok]
+        w = blend_weight(gs)
+        c_dwarf = correction_dwarf(t, z)
+        g = gs.copy()
         for n_iter in range(1, maxiter + 1):
-            logg_new = spec_logg - _correction_D(logg_est, mh_logg)
-            fin      = np.isfinite(logg_new) & np.isfinite(logg_est)
-            delta    = np.max(np.abs(logg_new[fin] - logg_est[fin])) if fin.any() else 0.0
-            logg_est = logg_new
+            g_new = gs - ((1.0 - w) * correction_giant(g, z) + w * c_dwarf)
+            delta = np.max(np.abs(g_new - g))
+            g = g_new
             if delta < tol:
                 break
-        logg_cal[is_giant] = logg_est
+        logg_cal[ok] = g
 
-    return logg_cal, is_giant, is_ms_dwarf, is_m_dwarf, n_iter
+    with np.errstate(invalid="ignore"):
+        g_side = ok & (logg_spec < BLEND_G0)
+        d_side = ok & (logg_spec >= BLEND_G0)
+        on_giant = ok & (logg_spec < BLEND_HI)
+        on_dwarf = ok & (logg_spec >= BLEND_LO)
+        masks = [
+            g_side & (logg_cal < D_G_CLIP[0]),                                   # 9
+            g_side & (logg_cal >= D_G_CLIP[0]) & (logg_cal < D_TAPER_MID),       # 10
+            g_side & (logg_cal >= D_TAPER_MID),                                  # 11
+            d_side & (teff > E_TEFF_CLIP[1]),                                    # 12
+            d_side & (teff > E_TEFF_CLIP[0]) & (teff <= E_TEFF_CLIP[1]),         # 13
+            d_side & (teff <= E_TEFF_CLIP[0]),                                   # 14
+            (on_giant & ((mh < D_MH_CLIP[0]) | (mh > D_MH_CLIP[1])))
+            | (on_dwarf & ((mh < E_MH_CLIP[0]) | (mh > E_MH_CLIP[1]))),          # 15
+            on_dwarf & ((teff < E_TEFF_CLIP[0]) | (teff > E_TEFF_CLIP[1])),      # 16
+            ~ok,                                                                 # 17
+        ]
+    flags = np.zeros(logg_spec.shape, dtype=np.int64)
+    for bit, mask in enumerate(masks, start=9):
+        flags |= mask.astype(np.int64) << bit
+
+    if return_details:
+        details = {k: v for k, v in locals().items() if k.isupper()}
+        details.update(correction_giant=correction_giant, correction_dwarf=correction_dwarf,
+                       blend_weight=blend_weight)
+        return logg_cal, flags, n_iter, details
+    return logg_cal, flags, n_iter
 
 
 def apply_dr21_parameter_corrections(batch_size: int = 500):
     """
     Apply the DR21 corrections to the ASPCAP table.
-    Teff: Guilherme Limberg calibrated to GHB09 J-K Teff (same as IPL-4v2)
-    logg: giants only for now
-    X/M: solar neighbourhood abundance corrections, applied last
+    Teff: strat3_F_Dwarf6500 (Guilherme Limberg), calibrated to GHB09 J-Ks Teff
+    logg: Model D (APOKASC-3) for giants + Teff-driven dwarf branch, blended in raw logg
+    e_teff, e_logg: not calibrated; reset to raw_e_teff, raw_e_logg
+    M/H, X/M: no corrections
+
+    Every row is reset to its raw uncertainties, and teff / logg are set to the
+    calibrated value, or NaN where the star cannot be calibrated (bits 8 / 17).
+    calibrated_flags gets the DR21 bits (see get_dr21_teff_corrections and
+    get_dr21_logg_corrections); calibrated_flags_dr19 is not touched.
+
+    The equations, calibration data and validation are documented in
+    final_dr21_calibration/dr21_corrections.{py,md,tex} (GG/MWMHalo).
     """
+
+    def _raw(chunk, name):
+        # None -> NaN; the -999 sentinels of the exports -> NaN
+        a = np.array([getattr(r, name) for r in chunk], dtype=float)
+        with np.errstate(invalid="ignore"):
+            a[a < -900] = np.nan
+        return a
 
     q = ASPCAP.select()
     with tqdm(total=0, desc="Applying corrections") as pb:
         for chunk in chunked(q, batch_size):
-            updated = []
-            raw_loggs = []
-            raw_mhs = []
-            raw_teffs = []
-            raw_e_teffs = []
+            chunk = list(chunk)
+            raw_teffs = _raw(chunk, "raw_teff")
+            raw_loggs = _raw(chunk, "raw_logg")
+            raw_mhs = _raw(chunk, "raw_m_h_atm")
 
-            ## Pull all the relevant informtion for calculation corrections
-            ## note: Andy tells me that I cannot loop over chunk twice
-            ## but Gemini says I can because it makes a list
-            ## https://github.com/coleifer/peewee/blob/master/peewee.py#L419
-            ## If Andy's right the code doesn't work as it loops a second time
-            ## But he/Ilija will take care of it later
-            for r in chunk:
-                raw_loggs.append(r.raw_logg)
-                raw_mhs.append(r.raw_m_h_atm)
-                raw_teffs.append(r.raw_teff)
-                raw_e_teffs.append(r.raw_e_teff)
+            # Both take RAW parameters (the logg dwarf branch was fit against raw Teff)
+            teff_cal_array, teff_flags = get_dr21_teff_corrections(raw_loggs, raw_mhs, raw_teffs)
+            logg_cal_array, logg_flags, n_iter = get_dr21_logg_corrections(raw_loggs, raw_mhs, raw_teffs)
+            flags_array = teff_flags | logg_flags
 
-            raw_loggs = np.array(raw_loggs)
-            raw_mhs = np.array(raw_mhs)
-            raw_teffs = np.array(raw_teffs)
-            raw_e_teffs = np.array(raw_e_teffs)
+            for r, teff_cal_val, logg_cal_val, flags_val in zip(
+                    chunk, teff_cal_array, logg_cal_array, flags_array):
+                r.teff = float(teff_cal_val)    # NaN where not calibrated
+                r.logg = float(logg_cal_val)
+                r.e_teff = r.raw_e_teff
+                r.e_logg = r.raw_e_logg
+                r.calibrated_flags = int(flags_val)
 
-            ## Compute corrections
-
-            (logg_cal_array, logg_is_giant, logg_is_ms_dwarf,
-             logg_is_m_dwarf, n_iter) = get_dr21_logg_corrections(raw_loggs, raw_mhs, raw_teffs)
-
-            (teff_cal_array, e_teff_cal_array,
-             teff_is_giant, teff_is_dwarf) = get_dr21_teff_corrections(
-                 raw_loggs, raw_mhs, raw_teffs, e_teff=raw_e_teffs)
-
-            ## Update rows
-            ## Note: this logic may need updating if we can't loop it!
-            ## Also not sure about flag setting
-            for (r, logg_cal_val, is_giant_val, is_ms_dw_val, is_m_dw_val,
-                 teff_cal_val, e_teff_cal_val) in zip(
-                    chunk, logg_cal_array, logg_is_giant, logg_is_ms_dwarf,
-                    logg_is_m_dwarf, teff_cal_array, e_teff_cal_array):
-
-                update_logg = np.isfinite(logg_cal_val)
-                update_teff = np.isfinite(teff_cal_val)
-
-                if update_logg:
-                    r.logg = logg_cal_val
-                    r.flag_as_giant_for_calibration    = bool(is_giant_val)
-                    r.flag_as_dwarf_for_calibration    = bool(is_ms_dw_val)
-                    r.flag_as_m_dwarf_for_calibration  = bool(is_m_dw_val)
-                    ## TODO there might be a bug here for non-finite m dwarf logg other than MH
-                    if bool(is_m_dw_val) and not np.isfinite(logg_cal_val):
-                        r.flag_censored_logg_for_metal_poor_m_dwarf = True
-
-                if update_teff:
-                    r.teff = teff_cal_val
-                    if e_teff_cal_val is not None and np.isfinite(e_teff_cal_val):
-                        r.e_teff = float(e_teff_cal_val)
-                    ## TODO probably need to set some flags here, but I don't think they exist yet
-
-                if update_logg or update_teff:
-                    updated.append(r)
-
-            if updated:
-                fields = [
-                    ASPCAP.logg,
+            ASPCAP.bulk_update(
+                chunk,
+                fields=[
                     ASPCAP.teff,
                     ASPCAP.e_teff,
+                    ASPCAP.logg,
+                    ASPCAP.e_logg,
                     ASPCAP.calibrated_flags,
                 ]
-                (
-                    ASPCAP
-                    .bulk_update(updated, fields=fields)
-                )
+            )
             pb.update(batch_size)
 
 

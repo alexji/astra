@@ -670,6 +670,10 @@ def apply_dr19_irfm_corrections():
 def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
     """
     Apply the DR19 logg corrections to the ASPCAP data model.
+
+    Deprecated for DR21 and beyond (use apply_dr21_parameter_corrections).
+    Writes bits 0-4 of calibrated_flags, but first resets the whole field to 0,
+    which also clears the DR21 bits 5-22.
     """
 
     # First let's construct a classifier for the RC/RGB stars.
@@ -821,7 +825,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
         .update(
             logg=ASPCAP.raw_logg,
             e_logg=ASPCAP.raw_e_logg,
-            calibrated_flags_dr19=0
+            calibrated_flags=0
         )
         .where(
             (ASPCAP.v_astra_major_minor >= 7)
@@ -834,7 +838,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
         ASPCAP
         .update(
             logg=ASPCAP.raw_logg - (-0.947 + 1.886e-4 * ASPCAP.raw_teff + 0.410 * ASPCAP.raw_m_h_atm),
-            calibrated_flags_dr19=ASPCAP.flag_as_dwarf_for_calibration.set()
+            calibrated_flags=ASPCAP.flag_as_dwarf_for_calibration.set()
         )
         .where(
             (ASPCAP.v_astra_major_minor >= 7)
@@ -851,7 +855,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
         ASPCAP
         .update(
             logg=ASPCAP.raw_logg + ( 1.6930001 + 5.2043072e-07 * fn.pow(ASPCAP.raw_teff - 3800,2) - 3.6010967e-04 * ASPCAP.raw_teff - 1.7316068e+00 * ASPCAP.raw_m_h_atm + 4.0915239e-04 * ASPCAP.raw_m_h_atm * ASPCAP.raw_teff),
-            calibrated_flags_dr19=ASPCAP.flag_as_m_dwarf_for_calibration.set()
+            calibrated_flags=ASPCAP.flag_as_m_dwarf_for_calibration.set()
         )
         .where(
             (ASPCAP.v_astra_major_minor >= 7)
@@ -867,7 +871,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
         .update(
             logg=np.nan,
             e_logg=np.nan,
-            calibrated_flags_dr19=ASPCAP.flag_censored_logg_for_metal_poor_m_dwarf.set()
+            calibrated_flags=ASPCAP.flag_censored_logg_for_metal_poor_m_dwarf.set()
         )
         .where(
             (ASPCAP.v_astra_major_minor >= 7)
@@ -882,7 +886,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
     (
         ASPCAP
         .update(
-            calibrated_flags_dr19=ASPCAP.flag_as_m_dwarf_for_calibration.set(),
+            calibrated_flags=ASPCAP.flag_as_m_dwarf_for_calibration.set(),
             logg=ASPCAP.raw_logg - (-0.3183278 + -5.9076945e-07 * fn.pow(raw_teff-3800,2) + 4.2788306e-4 * (raw_teff-3800) + 2.1420905e-01 * raw_m_h_atm)
         )
     )
@@ -905,7 +909,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
         for chunk in chunked(q, batch_size):
             updated = []
             for r in chunk:
-                r.calibrated_flags_dr19 = 0 # remove any previous classifications
+                r.calibrated_flags = 0 # remove any previous classifications
                 r.logg = r.raw_logg
 
                 # evolved
@@ -936,7 +940,7 @@ def apply_dr19_logg_corrections(batch_size: int = 500, limit: int = None):
                     updated.append(r)
 
             if updated:
-                fields = [ASPCAP.logg, ASPCAP.calibrated_flags_dr19]
+                fields = [ASPCAP.logg, ASPCAP.calibrated_flags]
                 (
                     ASPCAP
                     .bulk_update(
@@ -1270,6 +1274,10 @@ def apply_dr19_solar_neighbourhood_abundance_corrections():
 def apply_ipl3_logg_corrections(batch_size: int = 500, limit: int = None):
     """
     Apply the IPL-3 logg corrections to the ASPCAP data model.
+
+    Deprecated for DR21 and beyond (use apply_dr21_parameter_corrections).
+    Writes bits 0-4 of calibrated_flags, but first resets the whole field to 0,
+    which also clears the DR21 bits 5-22.
     """
 
     # First let's construct a classifier for the RC/RGB stars.
@@ -1419,7 +1427,7 @@ def apply_ipl3_logg_corrections(batch_size: int = 500, limit: int = None):
             any_mass_radius = False
             updated = []
             for r in chunk:
-                r.calibrated_flags_dr19 = 0 # remove any previous classifications
+                r.calibrated_flags = 0 # remove any previous classifications
                 r.logg = r.raw_logg
 
                 #if r.raw_logg >= 3.8 and r.raw_teff < 4800 and r.bp_mag is not None and r.rp_mag is not None and 5.5 > (r.bp_mag - r.rp_mag) and (r.bp_mag - r.rp_mag) > 1.5:
@@ -1477,7 +1485,7 @@ def apply_ipl3_logg_corrections(batch_size: int = 500, limit: int = None):
                     updated.append(r)
 
             if updated:
-                fields = [ASPCAP.logg, ASPCAP.calibrated_flags_dr19]
+                fields = [ASPCAP.logg, ASPCAP.calibrated_flags]
                 if any_mass_radius:
                     fields.extend([
                         ASPCAP.teff,
@@ -1643,6 +1651,10 @@ def apply_ipl4v2_parameter_corrections(batch_size: int = 500):
     Teff: Guilherme Limberg calibrated to GHB09 J-K Teff
     M/H: no corrections yet
     X/M: no corrections yet
+
+    Deprecated for DR21 and beyond (use apply_dr21_parameter_corrections).
+    Writes bits 0-4 of calibrated_flags, but first resets the whole field to 0,
+    which also clears the DR21 bits 5-22.
     """
 
     q = ASPCAP.select()
@@ -1688,6 +1700,7 @@ def apply_ipl4v2_parameter_corrections(batch_size: int = 500):
                     chunk, logg_cal_array, logg_is_giant, logg_is_ms_dwarf,
                     logg_is_m_dwarf, teff_cal_array, e_teff_cal_array):
 
+                r.calibrated_flags = 0 # remove any previous classifications
                 update_logg = np.isfinite(logg_cal_val)
                 update_teff = np.isfinite(teff_cal_val)
 
@@ -1714,7 +1727,7 @@ def apply_ipl4v2_parameter_corrections(batch_size: int = 500):
                     ASPCAP.logg,
                     ASPCAP.teff,
                     ASPCAP.e_teff,
-                    ASPCAP.calibrated_flags_dr19,
+                    ASPCAP.calibrated_flags,
                 ]
                 (
                     ASPCAP
@@ -1739,18 +1752,19 @@ def get_dr21_teff_corrections(logg, mh, teff, return_details=False):
     stars (logg < 3.0, Teff >= 5500) take the giant window.
 
     Returns (teff_corr, flags).  teff_corr is NaN where not calibrated (raw Teff
-    negative/NaN, or logg/[M/H] NaN).  flags holds bits 0-8 of calibrated_flags:
+    negative/NaN, or logg/[M/H] NaN).  flags holds bits 5-13 of calibrated_flags
+    (bits 0-4 belong to the deprecated DR19-era corrections):
 
-        0  unclassified    logg < 3.0 and Teff >= 5500
-        1  giant           logg < 3.5 and 4500 <= Teff < 5500
-        2  clipped giant   logg < 3.5 and Teff < 4500 (frozen at 4500 K)
-        3  dwarf           dwarf class, S >= 0.5, Teff <= 6500
-        4  M dwarf         dwarf class, S < 0.5 (Teff ~< 4350; correction mostly off)
-        5  hot dwarf       dwarf class, Teff > 6500 (frozen at 6500 K)
-        6  [M/H] outside (-2.0, +0.5)
-        7  logg outside (0, 5)
-        8  not calibrated
-    Bits 0-5 are exclusive: exactly one is set for every calibrated star.
+        5   unclassified    logg < 3.0 and Teff >= 5500
+        6   giant           logg < 3.5 and 4500 <= Teff < 5500
+        7   clipped giant   logg < 3.5 and Teff < 4500 (frozen at 4500 K)
+        8   dwarf           dwarf class, S >= 0.5, Teff <= 6500
+        9   M dwarf         dwarf class, S < 0.5 (Teff ~< 4350; correction mostly off)
+        10  hot dwarf       dwarf class, Teff > 6500 (frozen at 6500 K)
+        11  [M/H] outside (-2.0, +0.5)
+        12  logg outside (0, 5)
+        13  not calibrated
+    Bits 5-10 are exclusive: exactly one is set for every calibrated star.
     """
     # Linear correction (fit to GHB09 J-Ks Teff)
     A, B, C = 742.714857, -78.334601, -0.14259202
@@ -1795,18 +1809,18 @@ def get_dr21_teff_corrections(logg, mh, teff, return_details=False):
         is_m_dwarf = is_dwarf & (S < GATE_MID)
         is_hot_dwarf = is_dwarf & ~is_m_dwarf & (teff > WINDOW_DWARF[1])
         masks = [
-            is_unclassified,                                  # 0
-            is_giant & (teff >= WINDOW_GIANT[0]),             # 1
-            is_giant & (teff < WINDOW_GIANT[0]),              # 2
-            is_dwarf & ~is_m_dwarf & ~is_hot_dwarf,           # 3
-            is_m_dwarf,                                       # 4
-            is_hot_dwarf,                                     # 5
-            valid & (mh_p != mh),                             # 6
-            valid & (logg_p != logg),                         # 7
-            ~valid,                                           # 8
+            is_unclassified,                                  # 5
+            is_giant & (teff >= WINDOW_GIANT[0]),             # 6
+            is_giant & (teff < WINDOW_GIANT[0]),              # 7
+            is_dwarf & ~is_m_dwarf & ~is_hot_dwarf,           # 8
+            is_m_dwarf,                                       # 9
+            is_hot_dwarf,                                     # 10
+            valid & (mh_p != mh),                             # 11
+            valid & (logg_p != logg),                         # 12
+            ~valid,                                           # 13
         ]
     flags = np.zeros(teff.shape, dtype=np.int64)
-    for bit, mask in enumerate(masks):
+    for bit, mask in enumerate(masks, start=5):
         flags |= mask.astype(np.int64) << bit
 
     if return_details:
@@ -1835,19 +1849,19 @@ def get_dr21_logg_corrections(logg_spec, mh, teff, maxiter=200, tol=1e-6,
     for k >= 10).  |dC/dlogg_cal| <= 0.54: converges in 7-18 iterations.
 
     Returns (logg_cal, flags, n_iter).  logg_cal is NaN where any input is
-    non-finite.  flags holds bits 9-17 of calibrated_flags:
+    non-finite.  flags holds bits 14-22 of calibrated_flags:
 
-        9   logg_spec < 3.85 and logg_cal < 0.5 (Model D lower clamp)
-        10  logg_spec < 3.85 and 0.5 <= logg_cal < 3.35 (main giant region)
-        11  logg_spec < 3.85 and logg_cal >= 3.35 (past the taper midpoint)
-        12  logg_spec >= 3.85 and teff > 6000 (frozen at 6000 K)
-        13  logg_spec >= 3.85 and 3500 < teff <= 6000
-        14  logg_spec >= 3.85 and teff <= 3500 (frozen at 3500 K)
-        15  [M/H] outside the support of a branch carrying >= 10% weight:
+        14  logg_spec < 3.85 and logg_cal < 0.5 (Model D lower clamp)
+        15  logg_spec < 3.85 and 0.5 <= logg_cal < 3.35 (main giant region)
+        16  logg_spec < 3.85 and logg_cal >= 3.35 (past the taper midpoint)
+        17  logg_spec >= 3.85 and teff > 6000 (frozen at 6000 K)
+        18  logg_spec >= 3.85 and 3500 < teff <= 6000
+        19  logg_spec >= 3.85 and teff <= 3500 (frozen at 3500 K)
+        20  [M/H] outside the support of a branch carrying >= 10% weight:
             (-2.0, +0.6) giant (logg_spec < 4.125), (-1.0, +0.6) dwarf (>= 3.575)
-        16  teff outside (3500, 6000) with the dwarf branch carrying >= 10% weight
-        17  not calibrated
-    Bits 9-14 are exclusive: exactly one is set for every calibrated star.
+        21  teff outside (3500, 6000) with the dwarf branch carrying >= 10% weight
+        22  not calibrated
+    Bits 14-19 are exclusive: exactly one is set for every calibrated star.
     """
     # Model D (APOKASC-3), unchanged from IPL-4v2.  Term order:
     # 1, z, g, z^2, g z, g^2, z^3, g z^2, g^2 z, g^3   with g = logg_cal, z = [M/H]
@@ -1925,18 +1939,18 @@ def get_dr21_logg_corrections(logg_spec, mh, teff, maxiter=200, tol=1e-6,
         on_dwarf = ok & (logg_spec >= BLEND_LO)
         masks = [
             g_side & (logg_cal < D_G_CLIP[0]),                                   # 9
-            g_side & (logg_cal >= D_G_CLIP[0]) & (logg_cal < D_TAPER_MID),       # 10
-            g_side & (logg_cal >= D_TAPER_MID),                                  # 11
-            d_side & (teff > E_TEFF_CLIP[1]),                                    # 12
-            d_side & (teff > E_TEFF_CLIP[0]) & (teff <= E_TEFF_CLIP[1]),         # 13
-            d_side & (teff <= E_TEFF_CLIP[0]),                                   # 14
+            g_side & (logg_cal >= D_G_CLIP[0]) & (logg_cal < D_TAPER_MID),       # 15
+            g_side & (logg_cal >= D_TAPER_MID),                                  # 16
+            d_side & (teff > E_TEFF_CLIP[1]),                                    # 17
+            d_side & (teff > E_TEFF_CLIP[0]) & (teff <= E_TEFF_CLIP[1]),         # 18
+            d_side & (teff <= E_TEFF_CLIP[0]),                                   # 19
             (on_giant & ((mh < D_MH_CLIP[0]) | (mh > D_MH_CLIP[1])))
-            | (on_dwarf & ((mh < E_MH_CLIP[0]) | (mh > E_MH_CLIP[1]))),          # 15
-            on_dwarf & ((teff < E_TEFF_CLIP[0]) | (teff > E_TEFF_CLIP[1])),      # 16
-            ~ok,                                                                 # 17
+            | (on_dwarf & ((mh < E_MH_CLIP[0]) | (mh > E_MH_CLIP[1]))),          # 20
+            on_dwarf & ((teff < E_TEFF_CLIP[0]) | (teff > E_TEFF_CLIP[1])),      # 21
+            ~ok,                                                                 # 22
         ]
     flags = np.zeros(logg_spec.shape, dtype=np.int64)
-    for bit, mask in enumerate(masks, start=9):
+    for bit, mask in enumerate(masks, start=14):
         flags |= mask.astype(np.int64) << bit
 
     if return_details:
@@ -1957,8 +1971,9 @@ def apply_dr21_parameter_corrections(batch_size: int = 500):
 
     Every row is reset to its raw uncertainties, and teff / logg are set to the
     calibrated value, or NaN where the star cannot be calibrated (bits 8 / 17).
-    calibrated_flags gets the DR21 bits (see get_dr21_teff_corrections and
-    get_dr21_logg_corrections); calibrated_flags_dr19 is not touched.
+    calibrated_flags gets the DR21 bits 5-22 (see get_dr21_teff_corrections and
+    get_dr21_logg_corrections).  The whole field is replaced, so the deprecated
+    DR19-era bits 0-4 are cleared and never set.
 
     The equations, calibration data and validation are documented in
     final_dr21_calibration/dr21_corrections.{py,md,tex} (GG/MWMHalo).
@@ -1990,7 +2005,7 @@ def apply_dr21_parameter_corrections(batch_size: int = 500):
                 r.logg = float(logg_cal_val)
                 r.e_teff = r.raw_e_teff
                 r.e_logg = r.raw_e_logg
-                r.calibrated_flags = int(flags_val)
+                r.calibrated_flags = int(flags_val)    # resets the deprecated bits 0-4
 
             ASPCAP.bulk_update(
                 chunk,

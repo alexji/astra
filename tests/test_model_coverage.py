@@ -296,23 +296,18 @@ class TestASPCAPModel:
         r.flag_initial_guess_from_apogeenet = True
         assert r.flag_initial_guess_from_apogeenet
 
-    def test_calibrated_flags_dr19(self):
+    def test_calibrated_flags(self):
         r = self.ASPCAP(spectrum_pk=self.spectrum_pk, source_pk=self.source_pk)
         r.flag_as_dwarf_for_calibration = True
         assert r.flag_as_dwarf_for_calibration
         r.flag_as_giant_for_calibration = True
         assert r.flag_as_giant_for_calibration
-        assert r.calibrated_flags_dr19 == 3
-        assert not r.calibrated_flags
-
-    def test_calibrated_flags(self):
-        r = self.ASPCAP(spectrum_pk=self.spectrum_pk, source_pk=self.source_pk)
+        # DR21 bits are offset past the deprecated DR19-era bits 0-4
         r.flag_teff_m_dwarf = True
         assert r.flag_teff_m_dwarf
         r.flag_logg_not_calibrated = True
         assert r.flag_logg_not_calibrated
-        assert r.calibrated_flags == 2**4 + 2**17
-        assert not r.calibrated_flags_dr19
+        assert r.calibrated_flags == 2**0 + 2**1 + 2**9 + 2**22
 
     def test_unmask_pixel_array(self):
         from astra.pipelines.ferre.utils import get_apogee_pixel_mask

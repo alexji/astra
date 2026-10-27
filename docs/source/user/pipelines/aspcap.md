@@ -252,10 +252,15 @@ These track the origin of the initial parameter guess:
 
 ### Calibration flags (`calibrated_flags`)
 
-Flags of the DR21 Teff and log(g) calibrations. Exactly one of the Teff region flags (bits 0-5) and one of the log(g) region flags (bits 9-14) is set for every calibrated star:
+Post-processing calibration flags. Bits 0-4 (`flag_as_*_for_calibration`, `flag_censored_logg_for_metal_poor_m_dwarf`) were set by the DR19-era corrections (DR19, IPL-3, IPL-4v2) and are deprecated for DR21 and beyond; the DR21 calibration resets them to 0. The remaining flags belong to the DR21 Teff and log(g) calibrations: exactly one of the Teff region flags (bits 5-10) and one of the log(g) region flags (bits 14-19) is set for every calibrated star.
 
 | Flag | Description |
 | --- | --- |
+| `flag_as_dwarf_for_calibration` | Classified as a main-sequence star for log(g) calibration |
+| `flag_as_giant_for_calibration` | Classified as a red giant branch star for log(g) calibration |
+| `flag_as_red_clump_for_calibration` | Classified as a red clump star for log(g) calibration |
+| `flag_as_m_dwarf_for_calibration` | Classified as an M dwarf for Teff and log(g) calibration |
+| `flag_censored_logg_for_metal_poor_m_dwarf` | log(g) censored for metal-poor ([M/H] < -0.6) M dwarfs |
 | `flag_teff_unclassified` | Teff: unclassified (logg < 3.0, Teff >= 5500 K) |
 | `flag_teff_giant` | Teff: giant (logg < 3.5, 4500 <= Teff < 5500 K) |
 | `flag_teff_giant_clipped` | Teff: giant below 4500 K; correction frozen at 4500 K |
@@ -274,18 +279,6 @@ Flags of the DR21 Teff and log(g) calibrations. Exactly one of the Teff region f
 | `flag_logg_m_h_clipped` | logg: [M/H] outside the branch support; correction frozen |
 | `flag_logg_teff_clipped` | logg: Teff outside (3500, 6000) K on the dwarf branch |
 | `flag_logg_not_calibrated` | logg: not calibrated |
-
-### DR19-era calibration flags (`calibrated_flags_dr19`)
-
-Calibration flags of the DR19-era corrections (DR19, IPL-3, IPL-4v2):
-
-| Flag | Description |
-| --- | --- |
-| `flag_as_dwarf_for_calibration` | Classified as a main-sequence star for log(g) calibration |
-| `flag_as_giant_for_calibration` | Classified as a red giant branch star for log(g) calibration |
-| `flag_as_red_clump_for_calibration` | Classified as a red clump star for log(g) calibration |
-| `flag_as_m_dwarf_for_calibration` | Classified as an M dwarf for Teff and log(g) calibration |
-| `flag_censored_logg_for_metal_poor_m_dwarf` | log(g) censored for metal-poor ([M/H] < -0.6) M dwarfs |
 
 ### Abundance flags (`*_flags`)
 

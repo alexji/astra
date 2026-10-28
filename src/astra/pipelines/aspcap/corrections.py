@@ -1938,7 +1938,7 @@ def get_dr21_logg_corrections(logg_spec, mh, teff, maxiter=200, tol=1e-6,
         on_giant = ok & (logg_spec < BLEND_HI)
         on_dwarf = ok & (logg_spec >= BLEND_LO)
         masks = [
-            g_side & (logg_cal < D_G_CLIP[0]),                                   # 9
+            g_side & (logg_cal < D_G_CLIP[0]),                                   # 14
             g_side & (logg_cal >= D_G_CLIP[0]) & (logg_cal < D_TAPER_MID),       # 15
             g_side & (logg_cal >= D_TAPER_MID),                                  # 16
             d_side & (teff > E_TEFF_CLIP[1]),                                    # 17
@@ -1970,7 +1970,7 @@ def apply_dr21_parameter_corrections(batch_size: int = 500):
     M/H, X/M: no corrections
 
     Every row is reset to its raw uncertainties, and teff / logg are set to the
-    calibrated value, or NaN where the star cannot be calibrated (bits 8 / 17).
+    calibrated value, or NaN where the star cannot be calibrated (bits 13 / 22).
     calibrated_flags gets the DR21 bits 5-22 (see get_dr21_teff_corrections and
     get_dr21_logg_corrections).  The whole field is replaced, so the deprecated
     DR19-era bits 0-4 are cleared and never set.

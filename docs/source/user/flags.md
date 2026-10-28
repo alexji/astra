@@ -232,7 +232,7 @@ These flags apply to the IRFM effective temperature from V-Ks (Gonzalez Hernande
 
 #### `calibrated_flags`
 
-These flags record calibration decisions. Bits 0-4 were set by the DR19-era corrections (DR19, IPL-3, IPL-4v2) and are deprecated for DR21 and beyond; the DR21 calibration resets them to 0. Bits 5-22 are set by the DR21 Teff and logg calibrations and record where each star sits relative to the calibration boundaries, in the raw Kiel diagram: exactly one of bits 5-10 is set when Teff is calibrated, and exactly one of bits 14-19 when logg is calibrated; stars that cannot be calibrated have bit 13 (Teff) or 22 (logg) set and a null value.
+These flags record calibration decisions. Bits 0-4 were set by the DR19-era corrections (DR19, IPL-3, IPL-4v2) and are deprecated for DR21 and beyond; the DR21 calibration resets them to 0. Bits 5-22 are set by the DR21 Teff and logg calibrations and record where each star sits relative to the calibration boundaries, in the raw Kiel diagram: exactly one of bits 5-10 is set when Teff is calibrated, and exactly one of bits 14-19 when logg is calibrated; stars that cannot be calibrated have bit 13 (Teff) or 22 (logg) set and a NaN value (a float NaN, not a null). In the database a NaN sorts above every number, so a query such as `teff > 6000` also selects these stars; filter on bits 13 and 22 to exclude them.
 
 | Flag name | Bit value | Description |
 |---|---|---|
